@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use std::io::{BufWriter, Read, Write};
 use std::env;
 
+const APP_NAME: &'static str = env!("CARGO_PKG_NAME");
+
 macro_rules! set_bit {
 	($val:expr, $bit:expr) => {
 		$val = $val | (0x1_u16 << ($bit as u16))
@@ -23,16 +25,16 @@ fn parse_reglist(line: String) -> u16 {
 }
 
 fn process_target(path: PathBuf) {
-	println!("File: '{}'", path.to_str().unwrap());
+	//println!("File: '{}'", path.to_str().unwrap());
 	let mut file: File = match File::open(&path) {
 		Ok(x) => x,
-		Err(e) => panic!("Cannot find or access file '{}': {}", path.to_str().unwrap(), e) 
+		Err(e) => panic!("[{}]: Cannot find or access file '{}': {}", APP_NAME, path.to_str().unwrap(), e) 
 	};
 
 	let mut str_content: String = String::new();
 	match file.read_to_string(&mut str_content) {
 		Ok(_) => {},
-		Err(e) => panic!("Could not read content of file '{}': {}", path.to_str().unwrap(), e)
+		Err(e) => panic!("[{}]: Could not read content of file '{}': {}", APP_NAME, path.to_str().unwrap(), e)
 	};
 	let asm_lines: Vec<&str> = str_content.lines().collect::<Vec<&str>>();
 	let mut asm_lines_mut: Vec<String> = asm_lines.iter().map(|&a| String::from(a)).collect();
@@ -49,25 +51,25 @@ fn process_target(path: PathBuf) {
 				|| asm_lines_mut[i].contains("sl") 
 				|| asm_lines_mut[i].contains("ip")
 			{
-				println!("Found POP.W with PC in line {}", line_counter);
+				println!("[{}]: Found POP T2 in line {}", APP_NAME, line_counter);
 
 				let jump: &str = "	b	_cfi_check_ra\n";
 				asm_lines_mut[i] = asm_lines_mut[i].replace("pc", "lr");
 				asm_lines_mut.insert(i + 1, jump.to_string());
 			} else {
-				println!("Found POP with PC in line {}", line_counter);
+				println!("[{}]: Found POP T1/T3 in line {}", APP_NAME, line_counter);
 
 				let jump: &str = "	b	_cfi_check_ra\n";
 				asm_lines_mut[i] = asm_lines_mut[i].replace("pc", "lr");
 				asm_lines_mut.insert(i + 1, jump.to_string());
 			}
 		} else if asm_lines_mut[i].contains("ldr") && asm_lines_mut[i].contains("pc") && asm_lines_mut[i].contains("[sp]") {
-			println!("Found LDR with PC in line {}", line_counter);
+			println!("[{}]: Found POP T3 in line {}", APP_NAME, line_counter);
 			let jump: &str = "	b	_cfi_check_ra\n";
 			asm_lines_mut[i] = String::from("pop	{lr}");
 			asm_lines_mut.insert(i + 1, jump.to_string());
 		} else if asm_lines_mut[i].contains("bx") && asm_lines_mut[i].contains("lr") {
-			println!("Found BX LR in line {}", line_counter);
+			println!("[{}]: Found BX LR in line {}", APP_NAME, line_counter);
 			let jump: &str = "	b	_cfi_check_ra\n";
 			asm_lines_mut[i] = String::from(jump);
 		}
@@ -96,17 +98,15 @@ fn main() {
 			let path: PathBuf = match PathBuf::from(expand_path).canonicalize() {
 				Ok(p) => p,
 				Err(e) => {
-					println!("Could not validate the specified path: {}", e);
+					println!("[{}]: Could not validate the specified path: {}", APP_NAME, e);
 					return;
 				},
 			};
 			process_target(path);
 		},
-		"-v" => {
-			println!("cfi_asm_mod version {}", env!("CARGO_PKG_VERSION"));
-		},
+		"-v" => println!("cfi_asm_mod version {}", env!("CARGO_PKG_VERSION")),
 		param => {
-			println!("The parameter {} is not recognized!", param);
+			println!("[{}]: The parameter {} is not recognized!", APP_NAME, param);
 		}
 	}
 }
